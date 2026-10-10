@@ -6,48 +6,31 @@ import (
 	"strings"
 
 	"github.com/LukeHagar/plexgo/models/components"
-	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	tint "github.com/lrstanley/bubbletint"
 	"github.com/ygelfand/plexctl/internal/plex"
+	"github.com/ygelfand/plexctl/internal/tui/widget/poster"
 	"github.com/ygelfand/plexctl/internal/ui"
 )
 
-// albumItem renders an album row with its year, release type, and track count.
-type albumItem struct {
-	metadata components.Metadata
-}
-
-func (i albumItem) Title() string { return i.metadata.Title }
-
-func (i albumItem) Description() string {
-	var parts []string
-	if i.metadata.Year != nil {
-		parts = append(parts, fmt.Sprintf("%d", *i.metadata.Year))
-	}
-	if sf, ok := i.metadata.AdditionalProperties["subformat"].(string); ok && sf != "" {
-		parts = append(parts, sf)
-	}
-	if i.metadata.LeafCount != nil {
-		parts = append(parts, fmt.Sprintf("%d tracks", *i.metadata.LeafCount))
-	}
-	return strings.Join(parts, " • ")
-}
-
-func (i albumItem) FilterValue() string { return i.metadata.Title }
+// Distinct from the library grid's list ID so in-flight poster loads from the
+// grid never land in the album row.
+const artistAlbumListID = 101
 
 type ArtistDetailView struct {
 	DetailBase
 	children      []components.Metadata
-	albumList     list.Model
+	albums        *poster.PosterList
 	selectedAlbum *AlbumDetailView
 }
 
 func NewArtistDetailView(ratingKey string, theme tint.Tint) *ArtistDetailView {
+	albums := poster.NewPosterList(artistAlbumListID, "Albums", nil, theme)
+	albums.Active = true
 	return &ArtistDetailView{
 		DetailBase: NewDetailBase(ratingKey, theme),
-		albumList:  createBaseDetailList(),
+		albums:     albums,
 	}
 }
 
@@ -87,9 +70,8 @@ func (v *ArtistDetailView) GetSelectedMetadata() *components.Metadata {
 	if v.selectedAlbum != nil {
 		return v.selectedAlbum.GetSelectedMetadata()
 	}
-	if v.albumList.SelectedItem() != nil {
-		meta := v.albumList.SelectedItem().(albumItem).metadata
-		return &meta
+	if v.albums.Cursor >= 0 && v.albums.Cursor < len(v.albums.Items) {
+		return &v.albums.Items[v.albums.Cursor].Metadata
 	}
 	return v.Metadata
 }
@@ -116,22 +98,21 @@ func (v *ArtistDetailView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	var cmds []tea.Cmd
+	v.albums.Cols = max((ui.GetLayout().InnerWidth()-4)/ui.PosterStepWidth, 1)
 
 	switch msg := msg.(type) {
 	case detailDataMsg:
 		v.children = msg.children
-		var items []list.Item
-		for _, child := range v.children {
-			items = append(items, albumItem{metadata: child})
-		}
-		v.albumList.SetItems(items)
+		cmds = append(cmds, v.albums.SetItems(msg.children))
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "enter":
-			if v.albumList.SelectedItem() != nil {
-				child := v.albumList.SelectedItem().(albumItem).metadata
-				v.selectedAlbum = NewAlbumDetailView(*child.RatingKey, v.Theme)
-				return v, v.selectedAlbum.Init()
+			if v.albums.Cursor >= 0 && v.albums.Cursor < len(v.albums.Items) {
+				child := v.albums.Items[v.albums.Cursor].Metadata
+				if child.RatingKey != nil {
+					v.selectedAlbum = NewAlbumDetailView(*child.RatingKey, v.Theme)
+					return v, v.selectedAlbum.Init()
+				}
 			}
 		case "esc", "backspace":
 			return v, func() tea.Msg { return BackMsg{} }
@@ -141,11 +122,8 @@ func (v *ArtistDetailView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	cmd := v.DetailBase.Update(msg)
 	cmds = append(cmds, cmd)
 
-	var listCmd tea.Cmd
-	v.albumList, listCmd = v.albumList.Update(msg)
+	_, listCmd := v.albums.Update(msg)
 	cmds = append(cmds, listCmd)
-
-	v.albumList.SetSize(ui.GetLayout().InnerWidth()-4, ui.GetLayout().ContentHeight()/2)
 
 	return v, tea.Batch(cmds...)
 }
@@ -161,9 +139,8 @@ func (v *ArtistDetailView) HelpKeys() []ui.HelpKey {
 	return []ui.HelpKey{
 		{Key: "enter", Desc: "Select Album"},
 		{Key: "p", Desc: "Play Selected Album"},
+		{Key: "left/right", Desc: "Browse Albums"},
 		{Key: "esc", Desc: "Back"},
-		{Key: "j/up", Desc: "Move Up / Scroll"},
-		{Key: "k/down", Desc: "Move Down / Scroll"},
 	}
 }
 
@@ -219,8 +196,8 @@ func (v *ArtistDetailView) View() string {
 		Border(lipgloss.NormalBorder(), true, false, false, false).
 		BorderForeground(v.Theme.BrightBlack()).
 		PaddingTop(1).
-		Render(v.albumList.View())
+		Render(v.albums.View())
 
 	return lipgloss.NewStyle().Padding(1, 2).Render(lipgloss.JoinVertical(lipgloss.Left, mainLayout, listContent)) +
-		"\n\n " + lipgloss.NewStyle().Foreground(v.Theme.BrightBlack()).Render("[enter] Select Album | [p] Play Album | [esc] Back")
+		"\n\n " + lipgloss.NewStyle().Foreground(v.Theme.BrightBlack()).Render("[enter] Select Album | [p] Play Album | [←/→] Browse | [esc] Back")
 }

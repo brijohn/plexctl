@@ -16,6 +16,14 @@ type PosterList struct {
 	Offset int
 	Theme  tint.Tint
 	Active bool
+	Cols   int // visible column override; 0 uses the layout default
+}
+
+func (m *PosterList) visibleCols() int {
+	if m.Cols > 0 {
+		return m.Cols
+	}
+	return ui.GetLayout().PosterColumns()
 }
 
 func NewPosterList(id int, title string, metadata []components.Metadata, theme tint.Tint) *PosterList {
@@ -75,7 +83,7 @@ func (m *PosterList) Sync() tea.Cmd {
 
 func (m *PosterList) fetchVisible() tea.Cmd {
 	var cmds []tea.Cmd
-	cols := ui.GetLayout().PosterColumns()
+	cols := m.visibleCols()
 
 	start := m.Offset
 	end := min(m.Offset+cols+2, len(m.Items))
@@ -129,7 +137,7 @@ func (m *PosterList) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *PosterList) fixScroll() tea.Cmd {
-	cols := ui.GetLayout().PosterColumns()
+	cols := m.visibleCols()
 
 	if m.Cursor < m.Offset {
 		m.Offset = m.Cursor
@@ -145,7 +153,7 @@ func (m *PosterList) View() string {
 		return ""
 	}
 
-	cols := ui.GetLayout().PosterColumns()
+	cols := m.visibleCols()
 
 	var itemViews []string
 	end := m.Offset + cols

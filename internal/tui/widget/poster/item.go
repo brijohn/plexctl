@@ -58,7 +58,15 @@ func FetchPoster(listID int, index int, metadata components.Metadata) tea.Cmd {
 		}
 
 		path := ""
-		if metadata.GrandparentThumb != nil {
+		if metadata.Type == "album" || metadata.Type == "track" {
+			// Parent/grandparent thumbs are the artist photo; the item's own
+			// thumb is the album cover.
+			if metadata.Thumb != nil {
+				path = *metadata.Thumb
+			} else if metadata.ParentThumb != nil {
+				path = *metadata.ParentThumb
+			}
+		} else if metadata.GrandparentThumb != nil {
 			path = *metadata.GrandparentThumb
 		} else if metadata.ParentThumb != nil {
 			path = *metadata.ParentThumb
@@ -151,6 +159,9 @@ func RenderPosterItem(item *PosterItem, isSelected bool, active bool, theme tint
 }
 
 func GetDisplayTitle(meta *components.Metadata) string {
+	if meta.Type == "album" && meta.Year != nil {
+		return fmt.Sprintf("%s (%d)", meta.Title, *meta.Year)
+	}
 	if meta.Type != "episode" {
 		return meta.Title
 	}
