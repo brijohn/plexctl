@@ -305,6 +305,10 @@ func (v *MediaView) ShowDetail(ratingKey, mediaType string) tea.Cmd {
 		dv = detail.NewSeasonDetailView(ratingKey, v.theme)
 	case "episode":
 		dv = detail.NewEpisodeDetailView(ratingKey, v.theme)
+	case "artist":
+		dv = detail.NewArtistDetailView(ratingKey, v.theme)
+	case "album":
+		dv = detail.NewAlbumDetailView(ratingKey, v.theme)
 	default:
 		dv = detail.NewMovieDetailView(ratingKey, v.theme)
 	}

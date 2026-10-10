@@ -111,6 +111,45 @@ func ptr[T any](v T) *T {
 
 // GetChildren retrieves children of an item (e.g. seasons of a show, or episodes of a season)
 func GetChildren(ctx context.Context, ratingKey string) ([]components.Metadata, error) {
+	return getMetadataList(ctx,
+		fmt.Sprintf("children/%s", ratingKey),
+		fmt.Sprintf("/library/metadata/%s/children", ratingKey))
+}
+
+// GetArtistAlbums lists every album in a section containing tracks by the
+// artist, including soundtracks and compilations that are not children of the
+// artist item itself.
+func GetArtistAlbums(ctx context.Context, sectionID, artistRatingKey string) ([]components.Metadata, error) {
+	return getMetadataList(ctx,
+		fmt.Sprintf("artist_albums/%s/%s", sectionID, artistRatingKey),
+		fmt.Sprintf("/library/sections/%s/all?artist.id=%s&type=9", sectionID, artistRatingKey))
+}
+
+// GetArtistTracks lists every track by the artist in a section, across all
+// albums including soundtracks and compilations.
+func GetArtistTracks(ctx context.Context, sectionID, artistRatingKey string) ([]components.Metadata, error) {
+	return getMetadataList(ctx,
+		fmt.Sprintf("artist_tracks/%s/%s", sectionID, artistRatingKey),
+		fmt.Sprintf("/library/sections/%s/all?artist.id=%s&type=10", sectionID, artistRatingKey))
+}
+
+// SectionIDOf extracts the library section ID carried in a metadata item.
+func SectionIDOf(meta *components.Metadata) string {
+	if meta == nil {
+		return ""
+	}
+	switch v := meta.AdditionalProperties["librarySectionID"].(type) {
+	case string:
+		return v
+	case float64:
+		return fmt.Sprintf("%.0f", v)
+	}
+	return ""
+}
+
+// getMetadataList fetches and caches a metadata listing from a server path
+// (which may include query parameters, without the token).
+func getMetadataList(ctx context.Context, cacheKeySuffix, path string) ([]components.Metadata, error) {
 	cfg := config.Get()
 	serverID, serverCfg, ok := cfg.GetActiveServer()
 	if !ok {
@@ -122,15 +161,15 @@ func GetChildren(ctx context.Context, ratingKey string) ([]components.Metadata, 
 		return nil, err
 	}
 
-	cacheKey := fmt.Sprintf("%s/children/%s", serverID, ratingKey)
+	cacheKey := fmt.Sprintf("%s/%s", serverID, cacheKeySuffix)
 	var body components.MediaContainerWithMetadata
-	if err := cm.Get(cacheKey, &body); err == nil {
+	if err := cm.Get(cacheKey, &body); err == nil && body.MediaContainer != nil {
 		return body.MediaContainer.Metadata, nil
 	}
 
-	url := fmt.Sprintf("%s/library/metadata/%s/children", serverCfg.URL, ratingKey)
+	url := serverCfg.URL + path
 	separator := "?"
-	if strings.Contains(url, "?") {
+	if strings.Contains(path, "?") {
 		separator = "&"
 	}
 	url = fmt.Sprintf("%s%sX-Plex-Token=%s", url, separator, cfg.Token)
@@ -144,7 +183,7 @@ func GetChildren(ctx context.Context, ratingKey string) ([]components.Metadata, 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("failed to fetch children: %s", resp.Status)
+		return nil, fmt.Errorf("failed to fetch %s: %s", path, resp.Status)
 	}
 
 	data, err := io.ReadAll(resp.Body)
@@ -153,11 +192,11 @@ func GetChildren(ctx context.Context, ratingKey string) ([]components.Metadata, 
 	}
 
 	if err := json.Unmarshal(data, &body); err != nil {
-		return nil, fmt.Errorf("failed to parse children: %w", err)
+		return nil, fmt.Errorf("failed to parse listing: %w", err)
 	}
 
 	if body.MediaContainer == nil {
-		return nil, fmt.Errorf("no media container in children response")
+		return nil, fmt.Errorf("no media container in response")
 	}
 
 	_ = cm.Set(cacheKey, body, MediaCacheTTL)

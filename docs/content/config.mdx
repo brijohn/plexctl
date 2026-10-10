@@ -18,6 +18,7 @@ default_view_mode: "poster" # Default: poster
 poster_renderer: "auto" # Default: auto
 video_output: "auto" # Default: auto
 terminal_video_mode: "suspend" # Default: suspend
+music_visualizer: "showcqt" # Default: showcqt
 close_video_on_quit: true # Default: false
 cache_dir: "/home/user/.plexctl/cache" # Default: ~/.plexctl/cache
 default_server: "d9e8f7a6b5c4d3e2f1a0"
@@ -99,6 +100,18 @@ How terminal video (`ctrl+p`) shares the screen with the TUI.
 - **Options:**
     - `suspend`: The TUI releases the terminal and mpv runs full-screen with its own keyboard controls and OSD; the TUI returns when playback ends.
     - `overlay`: mpv draws the video over the running TUI (matching the classic `tct` behavior); playback is controlled with the TUI keys (`space`, `x`).
+
+### `music_visualizer`
+The visualization rendered during music playback instead of a black window.
+- **Default:** `showcqt`
+- **Options:**
+    - `showcqt`: Musical spectrum bars.
+    - `showspectrum`: Scrolling spectrogram.
+    - `showwaves`: Waveform.
+    - `vectorscope`: Stereo vector scope.
+    - `none`: No visualization (black window or embedded cover art).
+
+Works with every video output, including terminal video (`ctrl+p`).
 
 ### `close_video_on_quit`
 When exiting `plexctl`, determine if the `mpv` video window should also be closed.

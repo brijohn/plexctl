@@ -84,6 +84,18 @@ const (
 	TerminalVideoOverlay TerminalVideoMode = "overlay"
 )
 
+// MusicVisualizer selects the lavfi filter rendered as video during
+// audio-only playback.
+type MusicVisualizer string
+
+const (
+	VisualizerNone     MusicVisualizer = "none"
+	VisualizerCQT      MusicVisualizer = "showcqt"
+	VisualizerSpectrum MusicVisualizer = "showspectrum"
+	VisualizerWaves    MusicVisualizer = "showwaves"
+	VisualizerScope    MusicVisualizer = "vectorscope"
+)
+
 type LibraryOptions struct {
 	IconEmoji string   `mapstructure:"icon_emoji" yaml:"icon_emoji"`
 	IconNF    string   `mapstructure:"icon_nf" yaml:"icon_nf"`
@@ -140,6 +152,7 @@ type Config struct {
 	PosterRenderer    PosterRenderer    `mapstructure:"poster_renderer"`     // auto, kitty, halfcell
 	VideoOutput       VideoOutput       `mapstructure:"video_output"`        // auto, window, tct, kitty
 	TerminalVideoMode TerminalVideoMode `mapstructure:"terminal_video_mode"` // suspend, overlay
+	MusicVisualizer   MusicVisualizer   `mapstructure:"music_visualizer"`    // none, showcqt, showspectrum, showwaves, vectorscope
 
 	// Server management
 	DefaultServer string            `mapstructure:"default_server"` // Stores the ClientIdentifier
@@ -179,6 +192,7 @@ func Get() *Config {
 			PosterRenderer:    PosterRendererAuto,
 			VideoOutput:       VideoOutputAuto,
 			TerminalVideoMode: TerminalVideoSuspend,
+			MusicVisualizer:   VisualizerCQT,
 		}
 	})
 	return instance
@@ -247,6 +261,7 @@ func (c *Config) Save() error {
 	viper.Set("poster_renderer", c.PosterRenderer)
 	viper.Set("video_output", c.VideoOutput)
 	viper.Set("terminal_video_mode", c.TerminalVideoMode)
+	viper.Set("music_visualizer", c.MusicVisualizer)
 	viper.Set("cache_dir", c.CacheDir)
 	viper.Set("default_server", c.DefaultServer)
 	viper.Set("servers", c.Servers)

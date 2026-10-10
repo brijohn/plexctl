@@ -73,6 +73,29 @@ func mpvVersionAtLeast(out []byte, major, minor int) bool {
 }
 
 /*
+visualizerGraph returns the mpv lavfi-complex filter graph that renders the
+configured music visualizer as the video output, or "" when disabled. The
+graph splits the audio into the audio output and a visualization video feed.
+*/
+func visualizerGraph() string {
+	const size = "1024x576"
+	var filter string
+	switch config.Get().MusicVisualizer {
+	case config.VisualizerNone:
+		return ""
+	case config.VisualizerSpectrum:
+		filter = fmt.Sprintf("showspectrum=s=%s:slide=scroll:color=intensity", size)
+	case config.VisualizerWaves:
+		filter = fmt.Sprintf("showwaves=s=%s:mode=line:rate=30", size)
+	case config.VisualizerScope:
+		filter = fmt.Sprintf("avectorscope=s=%s:rate=30:draw=line", size)
+	default: // showcqt
+		filter = fmt.Sprintf("showcqt=s=%s:fps=30", size)
+	}
+	return fmt.Sprintf("[aid1]asplit[ao][vis];[vis]%s[vo]", filter)
+}
+
+/*
 terminalVoArgs builds the mpv vo arguments for a terminal video output.
 overlay=true confines the video to a region over the running TUI; otherwise
 mpv owns the whole terminal. Adding a future terminal vo (e.g. sixel) means

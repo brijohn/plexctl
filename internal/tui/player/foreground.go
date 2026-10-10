@@ -47,8 +47,16 @@ func foregroundArgs(req *PlayRequest, output config.VideoOutput, startOffset int
 		"--force-media-title=" + req.Title,
 	}
 	args = append(args, terminalVoArgs[output](false)...)
+	if req.Music {
+		if graph := visualizerGraph(); graph != "" {
+			args = append(args, "--lavfi-complex="+graph)
+		}
+	}
 	for _, sub := range req.Subtitles {
 		args = append(args, "--sub-file="+sub.URL)
+	}
+	for _, item := range req.Queue {
+		args = append(args, item.URL)
 	}
 	return args
 }
@@ -92,6 +100,7 @@ func (pm *PlayerManager) AttachSuspend(msg SuspendPlayMsg) tea.Cmd {
 			Time:       float64(msg.StartOffset) / 1000.0,
 		}
 		pm.status.Play()
+		pm.setQueue(msg.Request)
 
 		if err := pm.connect(10 * time.Second); err != nil {
 			slog.Warn("PlayerManager: no IPC for suspended mpv, progress will not report", "error", err)
@@ -132,6 +141,7 @@ func (pm *PlayerManager) RunForeground(ctx context.Context, req *PlayRequest, ou
 		Time:       float64(startOffset) / 1000.0,
 	}
 	pm.status.Play()
+	pm.setQueue(req)
 
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("failed to start mpv: %w", err)

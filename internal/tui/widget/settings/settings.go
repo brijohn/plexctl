@@ -76,6 +76,7 @@ func (m *SettingsOverlayModel) updateItems() {
 		settingItem{id: "poster_renderer", title: "Poster Renderer", description: "Terminal graphics for posters", current: string(cfg.PosterRenderer)},
 		settingItem{id: "video_output", title: "Video Output", description: "Default mpv video output", current: string(cfg.VideoOutput)},
 		settingItem{id: "terminal_video_mode", title: "Terminal Video Mode", description: "How terminal video shares the screen", current: string(cfg.TerminalVideoMode)},
+		settingItem{id: "music_visualizer", title: "Music Visualizer", description: "Visualization shown during music playback", current: string(cfg.MusicVisualizer)},
 		settingItem{id: "default_to_tui", title: "Default to TUI", description: "Start TUI if no command given", current: fmt.Sprintf("%v", cfg.DefaultToTui)},
 		settingItem{id: "cache", title: "Enable Cache", description: "Cache Plex data locally", current: fmt.Sprintf("%v", !cfg.NoCache)},
 		settingItem{id: "auto_home_login", title: "Auto Home Login", description: "Login automatically if token exists", current: fmt.Sprintf("%v", cfg.AutoHomeLogin)},
@@ -223,6 +224,15 @@ func (m *SettingsOverlayModel) prepareSelection(id string) {
 			selectionItem{id: string(config.TerminalVideoSuspend), value: "Suspend TUI (mpv fullscreen)"},
 			selectionItem{id: string(config.TerminalVideoOverlay), value: "Overlay over TUI"},
 		}
+	case "music_visualizer":
+		m.selectionList.Title = "Choose Music Visualizer"
+		items = []list.Item{
+			selectionItem{id: string(config.VisualizerCQT), value: "Spectrum Bars (showcqt)"},
+			selectionItem{id: string(config.VisualizerSpectrum), value: "Spectrogram (showspectrum)"},
+			selectionItem{id: string(config.VisualizerWaves), value: "Waveform (showwaves)"},
+			selectionItem{id: string(config.VisualizerScope), value: "Vector Scope"},
+			selectionItem{id: string(config.VisualizerNone), value: "None"},
+		}
 	}
 
 	m.selectionList.SetItems(items)
@@ -244,6 +254,8 @@ func (m *SettingsOverlayModel) prepareSelection(id string) {
 		current = string(cfg.VideoOutput)
 	case "terminal_video_mode":
 		current = string(cfg.TerminalVideoMode)
+	case "music_visualizer":
+		current = string(cfg.MusicVisualizer)
 	}
 
 	for i, it := range items {
@@ -271,6 +283,8 @@ func (m *SettingsOverlayModel) applySetting(setting, value string) {
 		cfg.VideoOutput = config.VideoOutput(value)
 	case "terminal_video_mode":
 		cfg.TerminalVideoMode = config.TerminalVideoMode(value)
+	case "music_visualizer":
+		cfg.MusicVisualizer = config.MusicVisualizer(value)
 	}
 	_ = cfg.Save()
 }

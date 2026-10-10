@@ -25,6 +25,7 @@ type PlayerManager struct {
 	status     PlayerStatus
 	stopChan   chan struct{}
 	updates    chan tea.Msg
+	queue      map[string]PlayItem // playback URL -> queue entry, for track changes
 }
 
 var (
@@ -148,11 +149,23 @@ func (pm *PlayerManager) Play(req *PlayRequest, output config.VideoOutput, start
 			Time:     float64(startOffset) / 1000.0,
 		}
 		pm.status.Play()
+		pm.setQueue(req)
 
 		startSec := float64(startOffset) / 1000.0
-		slog.Debug("PlayerManager: sending loadfile to mpv", "url", req.URL, "startSec", startSec)
+		slog.Debug("PlayerManager: sending loadfile to mpv", "url", req.URL, "startSec", startSec, "queued", len(req.Queue))
+
+		// Music gets the visualizer graph; anything else clears it so a
+		// reused mpv instance plays real video again.
+		graph := ""
+		if req.Music {
+			graph = visualizerGraph()
+		}
+		pm.conn.Call("set_property", "lavfi-complex", graph)
 
 		pm.conn.Call("loadfile", req.URL, "replace", "-1", fmt.Sprintf("start=%.3f", startSec))
+		for _, item := range req.Queue {
+			pm.conn.Call("loadfile", item.URL, "append")
+		}
 		pm.conn.Call("set_property", "pause", false)
 		pm.conn.Call("set_property", "force-media-title", req.Title)
 		pm.conn.Call("set_property", "user-data/plex-rating-key", req.RatingKey)
@@ -345,7 +358,36 @@ func (pm *PlayerManager) setupObservers() {
 		pm.conn.Call("observe_property", 1, "time-pos")
 		pm.conn.Call("observe_property", 2, "pause")
 		pm.conn.Call("observe_property", 3, "duration")
+		pm.conn.Call("observe_property", 4, "path")
 	}
+}
+
+// setQueue records the queue entries so track changes can be matched by URL.
+func (pm *PlayerManager) setQueue(req *PlayRequest) {
+	pm.queue = map[string]PlayItem{
+		req.URL: {URL: req.URL, Title: req.Title, RatingKey: req.RatingKey},
+	}
+	for _, item := range req.Queue {
+		pm.queue[item.URL] = item
+	}
+}
+
+// handleTrackChange moves player state to the queue entry mpv switched to,
+// so the player bar and Plex progress reporting follow the current track.
+func (pm *PlayerManager) handleTrackChange(url string) {
+	item, ok := pm.queue[url]
+	if !ok || item.RatingKey == pm.status.Key {
+		return
+	}
+	pm.status.Key = item.RatingKey
+	pm.status.Title = item.Title
+	pm.status.File = url
+	pm.status.Time = 0
+	if pm.conn != nil {
+		pm.conn.Call("set_property", "force-media-title", item.Title)
+	}
+	pm.reportProgressWithKey()
+	pm.sendUpdate()
 }
 
 func (pm *PlayerManager) monitorEvents() {
@@ -423,6 +465,10 @@ func (pm *PlayerManager) handlePropertyChange(ev *mpvipc.Event) {
 			pm.status.Duration = val
 		}
 		pm.sendUpdate()
+	case 4: // path
+		if val, ok := ev.Data.(string); ok {
+			pm.handleTrackChange(val)
+		}
 	}
 }
 
@@ -491,6 +537,7 @@ func (pm *PlayerManager) cleanup() {
 		pm.conn = nil
 	}
 	pm.status = PlayerStatus{}
+	pm.queue = nil
 	if runtime.GOOS != "windows" {
 		os.Remove(pm.socketPath)
 	}
