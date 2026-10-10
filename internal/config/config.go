@@ -60,6 +60,30 @@ const (
 	ViewModePoster ViewMode = "poster"
 )
 
+type PosterRenderer string
+
+const (
+	PosterRendererAuto     PosterRenderer = "auto"
+	PosterRendererKitty    PosterRenderer = "kitty"
+	PosterRendererHalfcell PosterRenderer = "halfcell"
+)
+
+type VideoOutput string
+
+const (
+	VideoOutputAuto   VideoOutput = "auto"
+	VideoOutputWindow VideoOutput = "window"
+	VideoOutputTct    VideoOutput = "tct"
+	VideoOutputKitty  VideoOutput = "kitty"
+)
+
+type TerminalVideoMode string
+
+const (
+	TerminalVideoSuspend TerminalVideoMode = "suspend"
+	TerminalVideoOverlay TerminalVideoMode = "overlay"
+)
+
 type LibraryOptions struct {
 	IconEmoji string   `mapstructure:"icon_emoji" yaml:"icon_emoji"`
 	IconNF    string   `mapstructure:"icon_nf" yaml:"icon_nf"`
@@ -113,6 +137,9 @@ type Config struct {
 	DefaultToTui      bool              `mapstructure:"default_to_tui"`
 	AutoHomeLogin     bool              `mapstructure:"auto_home_login"`
 	CloseVideoOnQuit  bool              `mapstructure:"close_video_on_quit"`
+	PosterRenderer    PosterRenderer    `mapstructure:"poster_renderer"`     // auto, kitty, halfcell
+	VideoOutput       VideoOutput       `mapstructure:"video_output"`        // auto, window, tct, kitty
+	TerminalVideoMode TerminalVideoMode `mapstructure:"terminal_video_mode"` // suspend, overlay
 
 	// Server management
 	DefaultServer string            `mapstructure:"default_server"` // Stores the ClientIdentifier
@@ -142,13 +169,16 @@ func Get() *Config {
 		lvl := &slog.LevelVar{}
 		lvl.Set(slog.LevelInfo)
 		instance = &Config{
-			Logger:          slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: lvl})),
-			LogLevel:        lvl,
-			Servers:         make(map[string]Server),
-			CacheDir:        filepath.Join(home, ".plexctl", "cache"),
-			DefaultToTui:    true,
-			AutoHomeLogin:   true,
-			DefaultViewMode: ViewModePoster,
+			Logger:            slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: lvl})),
+			LogLevel:          lvl,
+			Servers:           make(map[string]Server),
+			CacheDir:          filepath.Join(home, ".plexctl", "cache"),
+			DefaultToTui:      true,
+			AutoHomeLogin:     true,
+			DefaultViewMode:   ViewModePoster,
+			PosterRenderer:    PosterRendererAuto,
+			VideoOutput:       VideoOutputAuto,
+			TerminalVideoMode: TerminalVideoSuspend,
 		}
 	})
 	return instance
@@ -214,6 +244,9 @@ func (c *Config) Save() error {
 	viper.Set("default_to_tui", c.DefaultToTui)
 	viper.Set("auto_home_login", c.AutoHomeLogin)
 	viper.Set("close_video_on_quit", c.CloseVideoOnQuit)
+	viper.Set("poster_renderer", c.PosterRenderer)
+	viper.Set("video_output", c.VideoOutput)
+	viper.Set("terminal_video_mode", c.TerminalVideoMode)
 	viper.Set("cache_dir", c.CacheDir)
 	viper.Set("default_server", c.DefaultServer)
 	viper.Set("servers", c.Servers)

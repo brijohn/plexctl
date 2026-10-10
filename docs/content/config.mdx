@@ -15,6 +15,9 @@ theme: "nord" # Default: default
 icon_type: "nerdfonts" # Default: emoji (detected)
 library_name_format: "icon_name" # Default: icon_name
 default_view_mode: "poster" # Default: poster
+poster_renderer: "auto" # Default: auto
+video_output: "auto" # Default: auto
+terminal_video_mode: "suspend" # Default: suspend
 close_video_on_quit: true # Default: false
 cache_dir: "/home/user/.plexctl/cache" # Default: ~/.plexctl/cache
 default_server: "d9e8f7a6b5c4d3e2f1a0"
@@ -69,11 +72,33 @@ The initial layout used when browsing a library.
 - **Default:** `poster`
 - **Options:** `poster` (grid), `list` (table).
 
+### `poster_renderer`
+How poster thumbnails are drawn in the TUI.
+- **Default:** `auto`
+- **Options:**
+    - `auto`: Uses the kitty graphics protocol when the terminal supports it (kitty, Ghostty), otherwise half-blocks.
+    - `kitty`: Force real pixel images via the kitty graphics protocol (Unicode placeholders).
+    - `halfcell`: Force true-color half-block characters (works in any true-color terminal).
+
+Kitty rendering is disabled inside `tmux`/`screen`, which don't pass the protocol through.
+
 ---
 
 ## Playback & Cache
 
 Settings related to how media is played and how data is stored locally.
+
+### `video_output`
+The default mpv video output used for playback (`p` key, `plexctl play`).
+- **Default:** `auto` (a normal mpv window; terminal video via `ctrl+p` picks `kitty` when supported, else `tct`)
+- **Options:** `auto`, `window`, `tct` (terminal half-blocks), `kitty` (terminal pixel video, needs mpv ≥ 0.36).
+
+### `terminal_video_mode`
+How terminal video (`ctrl+p`) shares the screen with the TUI.
+- **Default:** `suspend`
+- **Options:**
+    - `suspend`: The TUI releases the terminal and mpv runs full-screen with its own keyboard controls and OSD; the TUI returns when playback ends.
+    - `overlay`: mpv draws the video over the running TUI (matching the classic `tct` behavior); playback is controlled with the TUI keys (`space`, `x`).
 
 ### `close_video_on_quit`
 When exiting `plexctl`, determine if the `mpv` video window should also be closed.

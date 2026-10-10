@@ -14,8 +14,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	tint "github.com/lrstanley/bubbletint"
-	gopixels "github.com/saran13raj/go-pixels"
 	"github.com/ygelfand/plexctl/internal/plex"
+	"github.com/ygelfand/plexctl/internal/render"
 	"github.com/ygelfand/plexctl/internal/ui"
 )
 
@@ -35,6 +35,16 @@ type ItemSelectedMsg struct {
 	Metadata components.Metadata
 }
 
+// CachedPosterView returns the disk-cached rendered poster for an item, when
+// the active renderer's output is cacheable.
+func CachedPosterView(ratingKey string) (string, bool) {
+	r := render.Active()
+	if ratingKey == "" || !r.CacheView() {
+		return "", false
+	}
+	return plex.GetCachedPoster(r.Name(), ratingKey, ui.PosterWidth)
+}
+
 // FetchPoster returns a command to fetch and render a poster
 func FetchPoster(listID int, index int, metadata components.Metadata) tea.Cmd {
 	return func() tea.Msg {
@@ -43,10 +53,8 @@ func FetchPoster(listID int, index int, metadata components.Metadata) tea.Cmd {
 			rk = *metadata.RatingKey
 		}
 
-		if rk != "" {
-			if cached, ok := plex.GetCachedPoster(rk, ui.PosterWidth); ok {
-				return PosterLoadedMsg{ListID: listID, Index: index, View: cached}
-			}
+		if cached, ok := CachedPosterView(rk); ok {
+			return PosterLoadedMsg{ListID: listID, Index: index, View: cached}
 		}
 
 		path := ""
@@ -72,13 +80,18 @@ func FetchPoster(listID int, index int, metadata components.Metadata) tea.Cmd {
 			return nil
 		}
 
-		imgStr, err := gopixels.FromImageStream(img, ui.PosterWidth, 0, "halfcell", true)
+		r := render.Active()
+		key := rk
+		if key == "" {
+			key = path
+		}
+		imgStr, err := r.Render(img, render.ItemKey{Key: key, Width: ui.PosterWidth}, ui.PosterWidth, ui.PosterHeight)
 		if err != nil {
 			return nil
 		}
 
-		if rk != "" {
-			plex.SetCachedPoster(rk, ui.PosterWidth, imgStr)
+		if rk != "" && r.CacheView() {
+			plex.SetCachedPoster(r.Name(), rk, ui.PosterWidth, imgStr)
 		}
 
 		return PosterLoadedMsg{ListID: listID, Index: index, View: imgStr}

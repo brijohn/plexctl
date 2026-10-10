@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	tint "github.com/lrstanley/bubbletint"
+	"github.com/ygelfand/plexctl/internal/config"
 	"github.com/ygelfand/plexctl/internal/tui/player"
 	"github.com/ygelfand/plexctl/internal/ui"
 )
@@ -15,22 +16,22 @@ import (
 type ResumeDecisionMsg struct {
 	Resume   bool
 	Metadata *components.Metadata
-	TctMode  bool
+	Output   config.VideoOutput
 }
 
 type ResumeOverlayModel struct {
 	Metadata *components.Metadata
-	TctMode  bool
+	Output   config.VideoOutput
 	theme    tint.Tint
 	choice   int // 0: Resume, 1: Start from beginning
 	width    int
 	height   int
 }
 
-func NewResumeOverlayModel(metadata *components.Metadata, tctMode bool, theme tint.Tint) *ResumeOverlayModel {
+func NewResumeOverlayModel(metadata *components.Metadata, output config.VideoOutput, theme tint.Tint) *ResumeOverlayModel {
 	return &ResumeOverlayModel{
 		Metadata: metadata,
-		TctMode:  tctMode,
+		Output:   output,
 		theme:    theme,
 		choice:   0,
 	}
@@ -54,7 +55,7 @@ func (m *ResumeOverlayModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if resume && m.Metadata.ViewOffset != nil {
 				offset = int64(*m.Metadata.ViewOffset)
 			}
-			return nil, player.PlayMedia(m.Metadata, false, m.TctMode, offset)
+			return nil, player.PlayMedia(m.Metadata, false, m.Output, offset)
 		case "esc":
 			return nil, nil
 		}

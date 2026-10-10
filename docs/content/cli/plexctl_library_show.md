@@ -9,7 +9,10 @@ plexctl library show [library_id] [flags]
 ### Options
 
 ```
-  -h, --help   help for show
+      --all         Return all items (overrides count/page)
+      --count int   Number of items to return per page (default 50)
+  -h, --help        help for show
+      --page int    Page number to return (default 1)
 ```
 
 ### Options inherited from parent commands

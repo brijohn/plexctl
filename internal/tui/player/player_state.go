@@ -1,16 +1,20 @@
 package player
 
-import "github.com/LukeHagar/plexgo/models/operations"
+import (
+	"github.com/LukeHagar/plexgo/models/operations"
+	"github.com/ygelfand/plexctl/internal/config"
+)
 
 type PlayerStatus struct {
-	Time     float64
-	Duration float64
-	Title    string
-	File     string
-	Key      string
-	State    operations.State
-	NoReport bool
-	TctMode  bool
+	Time       float64
+	Duration   float64
+	Title      string
+	File       string
+	Key        string
+	State      operations.State
+	NoReport   bool
+	Output     config.VideoOutput
+	Foreground bool // mpv owns the terminal (suspend/CLI), not drawing over the TUI
 }
 
 type ExternalSubtitle struct {

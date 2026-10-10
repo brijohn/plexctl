@@ -18,8 +18,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	tint "github.com/lrstanley/bubbletint"
-	gopixels "github.com/saran13raj/go-pixels"
 	"github.com/ygelfand/plexctl/internal/plex"
+	"github.com/ygelfand/plexctl/internal/render"
 	"github.com/ygelfand/plexctl/internal/ui"
 )
 
@@ -63,12 +63,13 @@ func fetchPoster(metadata *components.Metadata, width int) tea.Cmd {
 		}
 
 		targetWidth := ui.DetailPosterWidth
+		r := render.Active()
 
 		slog.Debug("fetchPoster start", "title", metadata.Title, "ratingKey", rk, "width", targetWidth)
 
 		// Check long-term cache for rendered string
-		if rk != "" {
-			if cached, ok := plex.GetCachedPoster(rk, targetWidth); ok {
+		if rk != "" && r.CacheView() {
+			if cached, ok := plex.GetCachedPoster(r.Name(), rk, targetWidth); ok {
 				return posterDataMsg(cached)
 			}
 		}
@@ -88,7 +89,11 @@ func fetchPoster(metadata *components.Metadata, width int) tea.Cmd {
 			return nil
 		}
 
-		imgStr, err := gopixels.FromImageStream(img, targetWidth, 0, "halfcell", true)
+		key := rk
+		if key == "" {
+			key = *metadata.Thumb
+		}
+		imgStr, err := r.Render(img, render.ItemKey{Key: key, Width: targetWidth}, targetWidth, 0)
 		if err != nil {
 			slog.Error("fetchPoster render failed", "error", err)
 			return nil
@@ -96,8 +101,8 @@ func fetchPoster(metadata *components.Metadata, width int) tea.Cmd {
 		slog.Debug("fetchPoster render complete", "duration", time.Since(start))
 
 		// Save to long-term cache
-		if rk != "" {
-			plex.SetCachedPoster(rk, targetWidth, imgStr)
+		if rk != "" && r.CacheView() {
+			plex.SetCachedPoster(r.Name(), rk, targetWidth, imgStr)
 		}
 
 		return posterDataMsg(imgStr)

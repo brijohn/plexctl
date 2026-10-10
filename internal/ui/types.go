@@ -5,6 +5,7 @@ import (
 	"github.com/LukeHagar/plexgo/models/operations"
 	tea "github.com/charmbracelet/bubbletea"
 	tint "github.com/lrstanley/bubbletint"
+	"github.com/ygelfand/plexctl/internal/config"
 )
 
 type HelpKey struct {
@@ -69,12 +70,12 @@ type PlayableProvider interface {
 
 type RequestPlayMsg struct {
 	RatingKey string
-	TctMode   bool
+	Output    config.VideoOutput // resolved output, never "auto"
 }
 
 type ResumeChoiceMsg struct {
 	Metadata *components.Metadata
-	TctMode  bool
+	Output   config.VideoOutput
 }
 
 func Ptr[T any](v T) *T {

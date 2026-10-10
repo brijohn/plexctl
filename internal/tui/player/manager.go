@@ -76,9 +76,9 @@ func (pm *PlayerManager) Status() PlayerStatus {
 	return pm.status
 }
 
-func (pm *PlayerManager) Play(url, title, ratingKey string, noReport bool, tctMode bool, startOffset int64, subtitles []ExternalSubtitle) tea.Cmd {
+func (pm *PlayerManager) Play(req *PlayRequest, output config.VideoOutput, startOffset int64) tea.Cmd {
 	return func() tea.Msg {
-		slog.Debug("PlayerManager.Play start", "title", title, "rk", ratingKey, "tct", tctMode, "offset", startOffset)
+		slog.Debug("PlayerManager.Play start", "title", req.Title, "rk", req.RatingKey, "output", output, "offset", startOffset)
 		if err := pm.ensureMpv(); err != nil {
 			slog.Error("PlayerManager: mpv check failed", "error", err)
 			return err
@@ -91,11 +91,11 @@ func (pm *PlayerManager) Play(url, title, ratingKey string, noReport bool, tctMo
 		}
 
 		if pm.conn != nil {
-			if pm.status.TctMode != tctMode {
-				slog.Debug("PlayerManager: Mode changed, restarting mpv", "old", pm.status.TctMode, "new", tctMode)
+			if pm.status.Output != output {
+				slog.Debug("PlayerManager: output changed, restarting mpv", "old", pm.status.Output, "new", output)
 				pm.conn.Call("quit")
 				pm.cleanup()
-			} else if pm.status.Key != "" && pm.status.Key != ratingKey {
+			} else if pm.status.Key != "" && pm.status.Key != req.RatingKey {
 				slog.Debug("PlayerManager: different media, reporting progress first")
 				pm.reportProgressWithKey()
 			}
@@ -123,35 +123,44 @@ func (pm *PlayerManager) Play(url, title, ratingKey string, noReport bool, tctMo
 			}
 
 			if pm.conn == nil {
-				if err := pm.spawnMpv(tctMode); err != nil {
-					slog.Error("PlayerManager: spawn failed", "error", err)
-					return err
+				if err := pm.spawnMpv(output); err != nil {
+					slog.Error("PlayerManager: spawn failed", "error", err, "output", output)
+					// A broken kitty vo (old mpv, odd terminal) falls back to tct.
+					if output == config.VideoOutputKitty {
+						if err2 := pm.spawnMpv(config.VideoOutputTct); err2 != nil {
+							return err
+						}
+						pm.updates <- VideoFallbackMsg{From: output, To: config.VideoOutputTct}
+						output = config.VideoOutputTct
+					} else {
+						return err
+					}
 				}
 			}
 		}
 
 		pm.status = PlayerStatus{
-			Title:    title,
-			File:     url,
-			Key:      ratingKey,
-			NoReport: noReport,
-			TctMode:  tctMode,
+			Title:    req.Title,
+			File:     req.URL,
+			Key:      req.RatingKey,
+			NoReport: req.NoReport,
+			Output:   output,
 			Time:     float64(startOffset) / 1000.0,
 		}
 		pm.status.Play()
 
 		startSec := float64(startOffset) / 1000.0
-		slog.Debug("PlayerManager: sending loadfile to mpv", "url", url, "startSec", startSec)
+		slog.Debug("PlayerManager: sending loadfile to mpv", "url", req.URL, "startSec", startSec)
 
-		pm.conn.Call("loadfile", url, "replace", "-1", fmt.Sprintf("start=%.3f", startSec))
+		pm.conn.Call("loadfile", req.URL, "replace", "-1", fmt.Sprintf("start=%.3f", startSec))
 		pm.conn.Call("set_property", "pause", false)
-		pm.conn.Call("set_property", "force-media-title", title)
-		pm.conn.Call("set_property", "user-data/plex-rating-key", ratingKey)
-		pm.conn.Call("set_property", "user-data/plex-title", title)
-		pm.conn.Call("set_property", "user-data/plex-no-report", noReport)
-		pm.conn.Call("show-text", "PlexCTL: Loading "+title+"...", 5000)
+		pm.conn.Call("set_property", "force-media-title", req.Title)
+		pm.conn.Call("set_property", "user-data/plex-rating-key", req.RatingKey)
+		pm.conn.Call("set_property", "user-data/plex-title", req.Title)
+		pm.conn.Call("set_property", "user-data/plex-no-report", req.NoReport)
+		pm.conn.Call("show-text", "PlexCTL: Loading "+req.Title+"...", 5000)
 
-		for _, sub := range subtitles {
+		for _, sub := range req.Subtitles {
 			if _, err := pm.conn.Call("sub-add", sub.URL, "auto", sub.Title, sub.Language); err != nil {
 				slog.Warn("Failed to add subtitle track", "title", sub.Title, "error", err)
 			} else {
@@ -286,20 +295,17 @@ func (pm *PlayerManager) socketExists() bool {
 	return err == nil
 }
 
-func (pm *PlayerManager) spawnMpv(tctMode bool) error {
+func (pm *PlayerManager) spawnMpv(output config.VideoOutput) error {
 	args := []string{"--idle", "--no-resume-playback", fmt.Sprintf("--input-ipc-server=%s", pm.socketPath)}
-	if tctMode {
-		args = append(args, "-vo", "tct", "--really-quiet", "--vo-tct-buffering=frame")
-		if config.IsTUI {
-			args = append(args, "--vo-tct-height=40")
-		}
-	} else {
+	if output == config.VideoOutputWindow {
 		args = append(args, "--force-window=yes")
+	} else {
+		args = append(args, terminalVoArgs[output](config.IsTUI)...)
 	}
 
 	slog.Debug("PlayerManager: spawning mpv", "args", args)
 	cmd := exec.Command("mpv", args...)
-	if tctMode {
+	if output != config.VideoOutputWindow {
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 	}
@@ -308,8 +314,13 @@ func (pm *PlayerManager) spawnMpv(tctMode bool) error {
 		return fmt.Errorf("failed to start mpv: %w", err)
 	}
 
-	// Wait for socket to appear and respond to IPC
-	for i := 0; i < 50; i++ {
+	return pm.connect(5 * time.Second)
+}
+
+// connect polls the IPC socket until mpv responds, then starts event monitoring.
+func (pm *PlayerManager) connect(timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
 		if pm.socketExists() {
 			c := mpvipc.NewConnection(pm.socketPath)
 			if err := c.Open(); err == nil {

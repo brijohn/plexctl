@@ -11,7 +11,8 @@ plexctl play [media_id] [flags]
 ```
   -h, --help        help for play
       --no-resume   Start playback from the beginning
-      --tct         Use terminal video
+      --trailer     Play the primary trailer instead of the full media
+      --vo string   Video output: auto, window, tct, or kitty
 ```
 
 ### Options inherited from parent commands

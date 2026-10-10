@@ -21,9 +21,11 @@ var (
 	PosterCacheTTL = 30 * 24 * time.Hour // Cache rendered strings for 30 days
 )
 
-// GetCachedPoster tries to retrieve a rendered poster string from cache
-func GetCachedPoster(ratingKey string, width int) (string, bool) {
-	key := fmt.Sprintf("rendered_poster/%s/%d", ratingKey, width)
+// GetCachedPoster tries to retrieve a rendered poster string from cache.
+// mode namespaces the key per renderer so output from different protocols
+// never collides.
+func GetCachedPoster(mode, ratingKey string, width int) (string, bool) {
+	key := fmt.Sprintf("rendered_poster/%s/%s/%d", mode, ratingKey, width)
 
 	cfg := config.Get()
 	cm, err := cache.Get(cfg.CacheDir)
@@ -41,7 +43,7 @@ func GetCachedPoster(ratingKey string, width int) (string, bool) {
 }
 
 // SetCachedPoster stores a rendered poster string in cache
-func SetCachedPoster(ratingKey string, width int, view string) {
+func SetCachedPoster(mode, ratingKey string, width int, view string) {
 	cfg := config.Get()
 	cm, err := cache.Get(cfg.CacheDir)
 	if err != nil {
@@ -49,7 +51,7 @@ func SetCachedPoster(ratingKey string, width int, view string) {
 	}
 
 	slog.Debug("Poster Cache SAVE", "ratingKey", ratingKey, "width", width)
-	key := fmt.Sprintf("rendered_poster/%s/%d", ratingKey, width)
+	key := fmt.Sprintf("rendered_poster/%s/%s/%d", mode, ratingKey, width)
 	_ = cm.Set(key, view, PosterCacheTTL)
 }
 

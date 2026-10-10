@@ -5,7 +5,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	tint "github.com/lrstanley/bubbletint"
-	"github.com/ygelfand/plexctl/internal/plex"
 	"github.com/ygelfand/plexctl/internal/ui"
 )
 
@@ -28,11 +27,9 @@ func NewPosterList(id int, title string, metadata []components.Metadata, theme t
 		if m.RatingKey != nil {
 			rk = *m.RatingKey
 		}
-		if rk != "" {
-			if cached, ok := plex.GetCachedPoster(rk, ui.PosterWidth); ok {
-				items[i].Poster = cached
-				items[i].Loading = false
-			}
+		if cached, ok := CachedPosterView(rk); ok {
+			items[i].Poster = cached
+			items[i].Loading = false
 		}
 	}
 
@@ -59,11 +56,9 @@ func (m *PosterList) SetItems(metadata []components.Metadata) tea.Cmd {
 			if meta.RatingKey != nil {
 				rk = *meta.RatingKey
 			}
-			if rk != "" {
-				if cached, ok := plex.GetCachedPoster(rk, ui.PosterWidth); ok {
-					newItems[i].Poster = cached
-					newItems[i].Loading = false
-				}
+			if cached, ok := CachedPosterView(rk); ok {
+				newItems[i].Poster = cached
+				newItems[i].Loading = false
 			}
 		}
 	}

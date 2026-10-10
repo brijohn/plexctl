@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -12,6 +13,8 @@ import (
 	"github.com/ygelfand/plexctl/internal/commands"
 	"github.com/ygelfand/plexctl/internal/config"
 	"github.com/ygelfand/plexctl/internal/plex"
+	"github.com/ygelfand/plexctl/internal/render"
+	"github.com/ygelfand/plexctl/internal/term"
 	"github.com/ygelfand/plexctl/internal/tui"
 )
 
@@ -37,6 +40,15 @@ func runTUI() error {
 		return err
 	}
 
+	// Probe graphics capabilities before anything writes to the terminal,
+	// then pick the poster renderer and the output writer shared between
+	// Bubble Tea and out-of-band graphics transmissions.
+	caps := term.Detect()
+	slog.Debug("TUI: terminal capabilities", "kittyGraphics", caps.KittyGraphics,
+		"kittyPlaceholders", caps.KittyPlaceholders, "cellPx", fmt.Sprintf("%dx%d", caps.CellWidthPx, caps.CellHeightPx))
+	out := term.NewSyncWriter(os.Stdout)
+	render.Init(cfg.PosterRenderer, out)
+
 	resultChan := make(chan plex.LoaderResult, 1)
 
 	slog.Debug("TUI: Showing standalone splash")
@@ -47,9 +59,11 @@ func runTUI() error {
 	slog.Debug("TUI: Received loader result", "libraries", len(result.Libraries))
 
 	slog.Debug("TUI: Initializing controller and program")
-	p := tea.NewProgram(tui.NewController(result), tea.WithAltScreen())
+	p := tea.NewProgram(tui.NewController(result), tea.WithAltScreen(), tea.WithOutput(out))
 
-	if _, err := p.Run(); err != nil {
+	_, err := p.Run()
+	render.Active().Shutdown()
+	if err != nil {
 		slog.Error("TUI: Program run failed", "error", err)
 		return fmt.Errorf("failed to run TUI: %w", err)
 	}

@@ -14,6 +14,7 @@ import (
 	tint "github.com/lrstanley/bubbletint"
 	"github.com/ygelfand/plexctl/internal/config"
 	"github.com/ygelfand/plexctl/internal/plex"
+	"github.com/ygelfand/plexctl/internal/render"
 	"github.com/ygelfand/plexctl/internal/tui/player"
 	"github.com/ygelfand/plexctl/internal/tui/view"
 	"github.com/ygelfand/plexctl/internal/tui/view/detail"
@@ -133,6 +134,7 @@ func (c *Controller) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				break
 			}
 		}
+		render.ReInit(msg.Config.PosterRenderer)
 		return c, c.tabManager.setupTabs(c.data, c.theme, ui.SidebarWidth)
 
 	case tuiconfig.ConfigFinishedMsg:
@@ -186,9 +188,18 @@ func (c *Controller) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case ui.RequestPlayMsg:
-		return c, player.FetchAndPlay(msg.RatingKey, msg.TctMode)
+		return c, player.FetchAndPlay(msg.RatingKey, msg.Output)
 	case ui.ResumeChoiceMsg:
-		return c, c.navigator.Push(resume.NewResumeOverlayModel(msg.Metadata, msg.TctMode, c.theme))
+		return c, c.navigator.Push(resume.NewResumeOverlayModel(msg.Metadata, msg.Output, c.theme))
+	case player.SuspendPlayMsg:
+		return c, c.handleSuspendPlay(msg)
+	case player.SuspendFinishedMsg:
+		return c, c.handleSuspendFinished(msg)
+	case player.VideoFallbackMsg:
+		cmds = append(cmds,
+			c.alert.NewAlertCmd("error", fmt.Sprintf("%s video output failed, falling back to %s", msg.From, msg.To)),
+			c.player.WaitForUpdates())
+		return c, tea.Batch(cmds...)
 	case ui.SelectMediaMsg:
 		return c, c.handleSelectMedia(msg)
 	case ui.JumpToDetailMsg:
@@ -198,6 +209,7 @@ func (c *Controller) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return c, nil
 		}
 		oldActive := c.playerStatus.Active()
+		c.maybeResetGraphics(c.player.Status())
 		c.playerStatus = c.player.Status()
 		if oldActive != c.playerStatus.Active() {
 			ui.GetLayout().Update(ui.GetLayout().TotalWidth(), ui.GetLayout().TotalHeight(), c.playerStatus.Active())
@@ -211,6 +223,7 @@ func (c *Controller) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return c, tea.Batch(cmds...)
 	case player.PlayerStatusMsg:
 		oldActive := c.playerStatus.Active()
+		c.maybeResetGraphics(c.player.Status())
 		c.playerStatus = c.player.Status()
 		if oldActive != c.playerStatus.Active() {
 			ui.GetLayout().Update(ui.GetLayout().TotalWidth(), ui.GetLayout().TotalHeight(), c.playerStatus.Active())
@@ -238,14 +251,14 @@ func (c *Controller) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "h":
 			return c, c.tabManager.SetActive(0)
 		case "p", "ctrl+p":
-			tctMode := msg.String() == "ctrl+p"
+			output := player.ResolveOutput(config.Get().VideoOutput, msg.String() == "ctrl+p")
 			if provider, ok := c.tabManager.ActiveModel().(ui.PlayableProvider); ok {
 				meta := provider.GetSelectedMetadata()
 				if meta != nil && meta.RatingKey != nil {
 					return c, func() tea.Msg {
 						return ui.RequestPlayMsg{
 							RatingKey: *meta.RatingKey,
-							TctMode:   tctMode,
+							Output:    output,
 						}
 					}
 				}
@@ -291,6 +304,54 @@ func (c *Controller) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	return c, tea.Batch(cmds...)
+}
+
+// maybeResetGraphics clears mpv's leftover kitty frame and retransmits poster
+// images when overlay terminal playback ends. Suspended playback resets via
+// SuspendFinishedMsg instead.
+func (c *Controller) maybeResetGraphics(next player.PlayerStatus) {
+	if c.playerStatus.Active() && !next.Active() &&
+		c.playerStatus.Output == config.VideoOutputKitty && !c.playerStatus.Foreground {
+		render.Active().ResetSession()
+	}
+}
+
+// handleSuspendPlay suspends the TUI and runs mpv in the foreground with full
+// terminal ownership; progress reporting attaches over IPC in parallel.
+func (c *Controller) handleSuspendPlay(msg player.SuspendPlayMsg) tea.Cmd {
+	execCmd, err := c.player.BuildSuspendCmd(msg)
+	if err != nil {
+		return func() tea.Msg { return err }
+	}
+	started := time.Now()
+	return tea.Batch(
+		c.player.AttachSuspend(msg),
+		tea.ExecProcess(execCmd, func(err error) tea.Msg {
+			return player.SuspendFinishedMsg{Request: msg, Err: err, Elapsed: time.Since(started)}
+		}),
+	)
+}
+
+func (c *Controller) handleSuspendFinished(msg player.SuspendFinishedMsg) tea.Cmd {
+	// mpv's kitty vo wipes all terminal images; restore the poster images.
+	render.Active().ResetSession()
+
+	var cmds []tea.Cmd
+	cmds = append(cmds, func() tea.Msg { return player.PlayerStatusMsg{} })
+
+	// A kitty vo that dies right away falls back to tct; a late error is a
+	// playback problem, not a protocol one.
+	if msg.Err != nil && msg.Request.Output == config.VideoOutputKitty && msg.Elapsed < 5*time.Second {
+		retry := msg.Request
+		retry.Output = config.VideoOutputTct
+		cmds = append(cmds,
+			c.alert.NewAlertCmd("error", "kitty video output failed, falling back to tct"),
+			func() tea.Msg { return retry },
+		)
+	} else if msg.Err != nil {
+		cmds = append(cmds, c.alert.NewAlertCmd("error", "mpv: "+msg.Err.Error()))
+	}
+	return tea.Batch(cmds...)
 }
 
 func (c *Controller) handleSelectMedia(msg ui.SelectMediaMsg) tea.Cmd {

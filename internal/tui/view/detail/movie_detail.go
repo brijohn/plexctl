@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	tint "github.com/lrstanley/bubbletint"
+	"github.com/ygelfand/plexctl/internal/config"
 	"github.com/ygelfand/plexctl/internal/plex"
 	"github.com/ygelfand/plexctl/internal/tui/player"
 	"github.com/ygelfand/plexctl/internal/ui"
@@ -75,7 +76,7 @@ func (v *MovieDetailView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (v *MovieDetailView) playTrailer() tea.Cmd {
-	return player.FetchAndPlayTrailer(v.Metadata, false)
+	return player.FetchAndPlayTrailer(v.Metadata, player.ResolveOutput(config.Get().VideoOutput, false))
 }
 
 func (v *MovieDetailView) hasTrailer() bool {

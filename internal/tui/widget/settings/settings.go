@@ -73,6 +73,9 @@ func (m *SettingsOverlayModel) updateItems() {
 		settingItem{id: "icon_type", title: "Icon Mode", description: "Icon set for navigation", current: string(cfg.IconType)},
 		settingItem{id: "name_format", title: "Name Format", description: "How libraries are named", current: string(cfg.LibraryNameFormat)},
 		settingItem{id: "default_view_mode", title: "Default View Mode", description: "Initial view for libraries", current: string(cfg.DefaultViewMode)},
+		settingItem{id: "poster_renderer", title: "Poster Renderer", description: "Terminal graphics for posters", current: string(cfg.PosterRenderer)},
+		settingItem{id: "video_output", title: "Video Output", description: "Default mpv video output", current: string(cfg.VideoOutput)},
+		settingItem{id: "terminal_video_mode", title: "Terminal Video Mode", description: "How terminal video shares the screen", current: string(cfg.TerminalVideoMode)},
 		settingItem{id: "default_to_tui", title: "Default to TUI", description: "Start TUI if no command given", current: fmt.Sprintf("%v", cfg.DefaultToTui)},
 		settingItem{id: "cache", title: "Enable Cache", description: "Cache Plex data locally", current: fmt.Sprintf("%v", !cfg.NoCache)},
 		settingItem{id: "auto_home_login", title: "Auto Home Login", description: "Login automatically if token exists", current: fmt.Sprintf("%v", cfg.AutoHomeLogin)},
@@ -199,6 +202,27 @@ func (m *SettingsOverlayModel) prepareSelection(id string) {
 			selectionItem{id: string(config.ViewModeList), value: "List"},
 			selectionItem{id: string(config.ViewModePoster), value: "Poster"},
 		}
+	case "poster_renderer":
+		m.selectionList.Title = "Choose Poster Renderer"
+		items = []list.Item{
+			selectionItem{id: string(config.PosterRendererAuto), value: "Auto (kitty when supported)"},
+			selectionItem{id: string(config.PosterRendererKitty), value: "Kitty Graphics"},
+			selectionItem{id: string(config.PosterRendererHalfcell), value: "Half-block Characters"},
+		}
+	case "video_output":
+		m.selectionList.Title = "Choose Video Output"
+		items = []list.Item{
+			selectionItem{id: string(config.VideoOutputAuto), value: "Auto"},
+			selectionItem{id: string(config.VideoOutputWindow), value: "Window"},
+			selectionItem{id: string(config.VideoOutputTct), value: "Terminal (tct)"},
+			selectionItem{id: string(config.VideoOutputKitty), value: "Terminal (kitty)"},
+		}
+	case "terminal_video_mode":
+		m.selectionList.Title = "Choose Terminal Video Mode"
+		items = []list.Item{
+			selectionItem{id: string(config.TerminalVideoSuspend), value: "Suspend TUI (mpv fullscreen)"},
+			selectionItem{id: string(config.TerminalVideoOverlay), value: "Overlay over TUI"},
+		}
 	}
 
 	m.selectionList.SetItems(items)
@@ -214,6 +238,12 @@ func (m *SettingsOverlayModel) prepareSelection(id string) {
 		current = string(cfg.LibraryNameFormat)
 	case "default_view_mode":
 		current = string(cfg.DefaultViewMode)
+	case "poster_renderer":
+		current = string(cfg.PosterRenderer)
+	case "video_output":
+		current = string(cfg.VideoOutput)
+	case "terminal_video_mode":
+		current = string(cfg.TerminalVideoMode)
 	}
 
 	for i, it := range items {
@@ -235,6 +265,12 @@ func (m *SettingsOverlayModel) applySetting(setting, value string) {
 		cfg.LibraryNameFormat = config.LibraryNameFormat(value)
 	case "default_view_mode":
 		cfg.DefaultViewMode = config.ViewMode(value)
+	case "poster_renderer":
+		cfg.PosterRenderer = config.PosterRenderer(value)
+	case "video_output":
+		cfg.VideoOutput = config.VideoOutput(value)
+	case "terminal_video_mode":
+		cfg.TerminalVideoMode = config.TerminalVideoMode(value)
 	}
 	_ = cfg.Save()
 }
